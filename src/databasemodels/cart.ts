@@ -39,9 +39,7 @@ const CartSchema = new mongoose.Schema({
 
 // Create the Cart and CartItem models from the schemas
 const Cart = mongoose.model("Cart", CartSchema);
-const CartItem = mongoose.model("CartItem", CartItemSchema);
+export const CartItem = mongoose.model("CartItem", CartItemSchema);
 
 // Export the models for use in other parts of the application
-export { Cart, CartItem };
-
-
+export { Cart};

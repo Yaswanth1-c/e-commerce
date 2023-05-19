@@ -10,10 +10,11 @@ export const stripe = require("stripe")(
     apiVersion: "2022-11-15",
   }
 );
-import { addToCart } from "./functionshandler/addToCart";
+import { addToCart } from "./functionshandler/addToCart.js";
 import { updateCartItem } from "./functionshandler/updateCartItem";
 import { removeCartItem } from "./functionshandler/removeCartItem";
 import { createOrder } from "./functionshandler/createOrder";
+import { createUser } from "./functionshandler/signUp";
 
 import jwt from "jsonwebtoken";
 // Hash the password using bcrypt
@@ -28,13 +29,11 @@ const JWT_SECRET = "secret";
 export const resolvers = {
   Query: {
     // Query to retrieve all products
-    products: async (_: unknown, { limit = 10, offset = 0 }) => {
-      const products = await Product.find()
-        .limit(limit)
-        .skip(offset);
+    products: async (_: unknown, { limit, offset }) => {
+      const products = await Product.find().limit(limit).skip(offset);
       return products;
     },
-    
+
     // Query to retrieve all carts
     cart: async () => {
       const cart = await Cart.find().populate("user items.product");
@@ -82,21 +81,17 @@ export const resolvers = {
       { input }: { input: ProductInput },
       context: any
     ) => {
-      // Check for admin authentication
-      if (!context || !context.user || !context.user.admin) {
-        throw new Error("Unauthorized");
+      // Check for authentication
+      if (!context) {
+        throw new Error("Authentication required");
       }
-
-      console.log(`@@@@@@@@@@@@@@@@@@`, context.user.admin);
       // Extract product details from input
       const { name, description, price, image } = input;
-
       // Create new product object
       const product = new Product({ name, description, price, image });
-
       // Save new product object to database
       await product.save();
-
+      console.log(product);
       // Return the newly created product object
       return product;
     },
@@ -153,7 +148,6 @@ export const resolvers = {
         if (!user || !user.id) {
           throw new Error("invalid user");
         }
-
         return await addToCart(productId, quantity, user.id);
       } catch (error) {
         console.error(error);
@@ -162,7 +156,7 @@ export const resolvers = {
     },
 
     // This function updates the quantity of a cart item for the user
-    updateCartItem: async (_, { cartItemId, quantity }, { user }) => {
+    updateCartItem: async (_: unknown, { cartItemId, quantity }, { user }) => {
       try {
         // Check if the user exists and has an ID
         if (!user || !user.id) {
@@ -176,36 +170,43 @@ export const resolvers = {
     },
 
     // This function removes the quantity of a cart item for the user
-    removeCartItem: async (_, { cartItemId }, { user }) => {
+    removeCartItem: async (_: unknown, { cartItemId }, { user }) => {
       console.log(cartItemId);
       try {
         // Check if the user is valid and has an ID
         if (!user || !user.id) {
           throw new Error("Invalid user");
         }
-
         return await removeCartItem(cartItemId, user.id);
       } catch (error) {
         console.error(error);
         throw new Error("Failed to remove item from cart");
       }
     },
-    createOrder: async (_, { input: { items, status } }, { user }) => {
+    // This function create createOrder for the user
+    createOrder: async (_: unknown, { input: { items, status } }, { user }) => {
       try {
+        // Call the createOrder function with the input items, status, and user
         return await createOrder(items, status, user);
       } catch (error) {
         console.error(error);
+        // If an error occurs, throw a new error with a message indicating that the order creation failed
         throw new Error("Failed to create order");
       }
     },
-    updateOrderStatus: async (_, { input: { id, status } }, { user }) => {
+    // This function updates the OrderStatus
+    updateOrderStatus: async (
+      _: unknown,
+      { input: { id, status } },
+      { user }
+    ) => {
       try {
         // Check if the user is valid and has an ID
         if (!user || !user.id) {
           throw new Error("Invalid user");
         }
-        // Return the updated order and a success message
-        // return {
+        // If the user is valid, update the status of the order with the given ID
+        // and return the success message
         return {
           message: "Updated Successfully",
         };
@@ -222,6 +223,7 @@ export const resolvers = {
         if (!user || !user.id) {
           throw new Error("Invalid user");
         }
+        // Return the success message
         return {
           message: "Order deleted successfully",
         };
@@ -285,64 +287,11 @@ export const resolvers = {
         throw new Error("Failed to create payment intent");
       }
     },
-
-    signOut: async (
-      _: unknown, // The parent value of this resolver function, which is not used here
-      __: unknown, // The arguments passed to this function, which is not used here
-      { user } // The context object, which should include the current authenticated user
-    ) => {
-      // Ensure that there is a current user
-      if (!user) {
-        throw new Error("User not authenticated");
-      }
-      // Return a message indicating that the user has been signed out
-      return true;
-    },
-
-    signUp: async (_, { input }) => {
-      const {
-        name,
-        email,
-        password,
-        isAdmin = false,
-        phoneNumber,
-        shippingAddress,
-        billingAddress,
-      } = input;
-
-      // Check if a user with the same email already exists
-      const existingUser = await User.findOne({ email });
-      if (existingUser) {
-        throw new Error("User already exists");
-      }
-      const phoneRegex = /^\d{10}$/;
-      if (!phoneRegex.test(phoneNumber)) {
-        throw new Error("Phone number must be 10 digits long");
-      }
-      // Hash the password using bcrypt
-      const hashedPassword = await bcrypt.hash(password, 10);
-
-      // Create a new user with the provided name, email, hashed password, and shipping address
-      const user = new User({
-        name,
-        email,
-        password: hashedPassword,
-        isAdmin,
-        phoneNumber,
-        shippingAddress,
-        billingAddress,
-      });
-      await user.save();
-
-      // Generate a JWT token for the user using the user ID as the payload
-      const token = jwt.sign({ userId: user.id }, JWT_SECRET, {
-        algorithm: "HS256",
-      });
-
-      // Return an object that contains the JWT token, user object, and a message
-      return { token, user, message: "User Created" };
-    },
     // This function handles user sign up process
+    signUp: async (_: unknown, { input }) => {
+      return await createUser(input);
+    },
+    // This function handles user sign in process
     // It takes user's name, email, and password as parameters
     // It returns an object that contains a JWT token, user ID, and a message
     signIn: async (
@@ -369,6 +318,18 @@ export const resolvers = {
 
       // Return an object that contains the JWT token, user ID, and a message
       return { token, id: user.id, message: "User Logged In" };
+    },
+    signOut: async (
+      _: unknown, // The parent value of this resolver function, which is not used here
+      __: unknown, // The arguments passed to this function, which is not used here
+      { user } // The context object, which should include the current authenticated user
+    ) => {
+      // Ensure that there is a current user
+      if (!user) {
+        throw new Error("User not authenticated");
+      }
+      // Return a message indicating that the user has been signed out
+      return true;
     },
   },
 };

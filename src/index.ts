@@ -11,7 +11,7 @@ import { User } from "./databasemodels/user";
 const JWT_SECRET = "secret";
 
 // Connect to the MongoDB database
-mongoose.connect("mongodb://127.0.0.1:27017/store");
+mongoose.connect("mongodb://127.0.0.1:27017/store",{ socketTimeoutMS: 30000 });
 mongoose.connection
   .once("open", () => console.log("connected"))
   .on("error", (error) => {
